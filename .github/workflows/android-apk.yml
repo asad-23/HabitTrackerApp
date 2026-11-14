@@ -4,9 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [master, main]
-    paths:
-      - "app/**"
-      - ".github/workflows/android-apk.yml"
+    paths-ignore:
+      - "**.md"
 
 permissions:
   contents: read
@@ -14,13 +13,6 @@ permissions:
 jobs:
   apk:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: app
-    env:
-      # Set this once in GitHub:
-      # Settings -> Secrets and variables -> Actions -> Variables
-      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
 
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +21,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: app/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - uses: actions/setup-java@v4
         with:
@@ -44,20 +36,13 @@ jobs:
         with:
           packages: >-
             platform-tools
-            platforms;android-37.0
+            platforms;android-37
             build-tools;37.0.0
             ndk;27.1.12297006
           accept-android-sdk-licenses: true
 
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses > /dev/null || true
-
-      - name: Check EXPO_PUBLIC_API_URL
-        run: |
-          if [ -z "$EXPO_PUBLIC_API_URL" ]; then
-            echo "::error title=Missing API URL::Add EXPO_PUBLIC_API_URL as a repository variable (Settings -> Secrets and variables -> Actions -> Variables)."
-            exit 1
-          fi
 
       - name: Install dependencies
         run: npm ci
@@ -85,7 +70,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: plada-apk
-          path: app/android/app/build/outputs/apk/release/*.apk
+          name: twice-apk
+          path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 90
