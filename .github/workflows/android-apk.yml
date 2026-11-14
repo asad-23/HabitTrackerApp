@@ -1,0 +1,91 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master, main]
+    paths:
+      - "app/**"
+      - ".github/workflows/android-apk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    env:
+      # Set this once in GitHub:
+      # Settings -> Secrets and variables -> Actions -> Variables
+      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # setup-android@v3 defaults to "tools platform-tools", but the legacy
+      # "tools" package no longer exists in the Android SDK repository.
+      # Override it with the SDK components this project actually uses
+      # (Expo SDK 58 / RN 0.88: compileSdk 37, build-tools 37.0.0, NDK 27.1).
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: >-
+            platform-tools
+            platforms;android-37.0
+            build-tools;37.0.0
+            ndk;27.1.12297006
+          accept-android-sdk-licenses: true
+
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses > /dev/null || true
+
+      - name: Check EXPO_PUBLIC_API_URL
+        run: |
+          if [ -z "$EXPO_PUBLIC_API_URL" ]; then
+            echo "::error title=Missing API URL::Add EXPO_PUBLIC_API_URL as a repository variable (Settings -> Secrets and variables -> Actions -> Variables)."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Build release APK
+        run: |
+          cd android
+          # Maven Central occasionally returns a 504 while redirecting Kotlin
+          # compiler artifacts to GitHub releases. Retry transient failures.
+          for attempt in 1 2 3; do
+            if ./gradlew assembleRelease --no-daemon \
+              -Dorg.gradle.internal.http.connectionTimeout=120000 \
+              -Dorg.gradle.internal.http.socketTimeout=120000; then
+              exit 0
+            fi
+            echo "Gradle build failed on attempt ${attempt}; retrying in 20s..."
+            sleep 20
+          done
+          echo "Gradle build failed after 3 attempts."
+          exit 1
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: plada-apk
+          path: app/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 90
