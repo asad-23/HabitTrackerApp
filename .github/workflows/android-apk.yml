@@ -36,10 +36,17 @@ jobs:
         with:
           packages: >-
             platform-tools
-            platforms;android-37
+            platforms;android-37.0
             build-tools;37.0.0
             ndk;27.1.12297006
           accept-android-sdk-licenses: true
+
+      - name: Symlink Android 37 platform for Gradle
+        run: |
+          SDK_DIR="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          if [ -d "$SDK_DIR/platforms/android-37.0" ] && [ ! -d "$SDK_DIR/platforms/android-37" ]; then
+            ln -s "$SDK_DIR/platforms/android-37.0" "$SDK_DIR/platforms/android-37"
+          fi
 
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses > /dev/null || true
